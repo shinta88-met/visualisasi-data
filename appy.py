@@ -9,7 +9,7 @@ st.title("📈 Dashboard Interaktif Curah Hujan")
 st.markdown("**La Nina Event 2020-2022**")
 
 # ==== LOAD DATA ====
-DATA_PATH = Path("data/17 pos hujan.xlsx")
+DATA_PATH = Path("17 pos hujan.xlsx")
 xls = pd.ExcelFile(DATA_PATH)
 
 # Sheet metadata lokasi
