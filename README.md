@@ -1,3 +1,3 @@
 # visualisasi-data
-Data Digital Curah Hujan Wilayah Sumatera Selatan 
-SUmber Data : https://awscenter.bmkg.go.id
+Data Curah Hujan Wilayah Sumatera Selatan Periode La Nina 2020-2022
+SUmber Data : pos hujan kerjasama
