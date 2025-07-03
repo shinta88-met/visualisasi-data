@@ -1,114 +1,77 @@
 import streamlit as st
-import xarray as xr
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 import pandas as pd
-from datetime import datetime
+import matplotlib.pyplot as plt
+from pathlib import Path
 
-st.set_page_config(page_title="Prakiraan Cuaca Wilayah Indonesia", layout="wide")
+# ==== CONFIGURASI DASHBOARD ====
+st.set_page_config(page_title="Dashboard Pos Hujan Sumatera Selatan", layout="wide")
+st.title("📈 Dashboard Interaktif Curah Hujan")
+st.markdown("**UAS SHINTA MEDIANY_M8TB_14.24.0012**")
 
-st.title("📡 Global Forecast System Viewer (Realtime via NOMADS)")
-st.header("Web Hasil Pembelajaran Pengelolaan Informasi Meteorologi")
+# ==== LOAD DATA ====
+DATA_PATH = Path("data/17 pos hujan.xlsx")
+xls = pd.ExcelFile(DATA_PATH)
 
-@st.cache_data
-def load_dataset(run_date, run_hour):
-    base_url = f"https://nomads.ncep.noaa.gov/dods/gfs_0p25_1hr/gfs{run_date}/gfs_0p25_1hr_{run_hour}z"
-    ds = xr.open_dataset(base_url)
-    return ds
+# Sheet metadata lokasi
+df_meta = xls.parse("pos hujan")
+df_meta.columns = df_meta.columns.str.strip()
+station_names = df_meta["Pos Hujan Kerja Sama"].str.replace("Pos hujan ", "").str.strip().tolist()
 
-st.sidebar.title("⚙️ Pengaturan")
+# ==== PILIH STASIUN ====
+station = st.selectbox("📍 Pilih Pos Hujan", station_names)
 
-# Input pengguna
-today = datetime.utcnow()
-run_date = st.sidebar.date_input("Tanggal Run GFS (UTC)", today.date())
-run_hour = st.sidebar.selectbox("Jam Run GFS (UTC)", ["00", "06", "12", "18"])
-forecast_hour = st.sidebar.slider("Jam ke depan", 0, 240, 0, step=1)
-parameter = st.sidebar.selectbox("Parameter", [
-    "Curah Hujan per jam (pratesfc)",
-    "Suhu Permukaan (tmp2m)",
-    "Angin Permukaan (ugrd10m & vgrd10m)",
-    "Tekanan Permukaan Laut (prmslmsl)"
-])
+# ==== LOAD DATA STASIUN ====
+def load_station_data(sheet_name):
+    df = xls.parse(sheet_name)
+    df.columns = df.columns.str.strip()
+    
+    # Cari kolom tanggal dan hujan
+    date_col = [col for col in df.columns if "tanggal" in col.lower()]
+    rain_col = [col for col in df.columns if "hujan" in col.lower()]
+    if not date_col or not rain_col:
+        return None
 
-if st.sidebar.button("🔎 Tampilkan Visualisasi"):
-    try:
-        ds = load_dataset(run_date.strftime("%Y%m%d"), run_hour)
-        st.success("Dataset berhasil dimuat.")
-    except Exception as e:
-        st.error(f"Gagal memuat data: {e}")
-        st.stop()
+    df = df[[date_col[0], rain_col[0]]].dropna()
+    df.columns = ["Tanggal", "Hujan"]
+    df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors='coerce')
+    df["Hujan"] = pd.to_numeric(df["Hujan"], errors='coerce')
+    df = df.dropna(subset=["Tanggal"])
 
-    is_contour = False
-    is_vector = False
+    return df
 
-    if "pratesfc" in parameter:
-        var = ds["pratesfc"][forecast_hour, :, :] * 3600
-        label = "Curah Hujan (mm/jam)"
-        cmap = "Blues"
-    elif "tmp2m" in parameter:
-        var = ds["tmp2m"][forecast_hour, :, :] - 273.15
-        label = "Suhu (°C)"
-        cmap = "coolwarm"
-    elif "ugrd10m" in parameter:
-        u = ds["ugrd10m"][forecast_hour, :, :]
-        v = ds["vgrd10m"][forecast_hour, :, :]
-        speed = (u**2 + v**2)**0.5 * 1.94384  # konversi ke knot
-        var = speed
-        label = "Kecepatan Angin (knot)"
-        cmap = plt.cm.get_cmap("RdYlGn_r", 10)
-        is_vector = True
-    elif "prmsl" in parameter:
-        var = ds["prmslmsl"][forecast_hour, :, :] / 100
-        label = "Tekanan Permukaan Laut (hPa)"
-        cmap = "cool"
-        is_contour = True
-    else:
-        st.warning("Parameter tidak dikenali.")
-        st.stop()
+df = load_station_data(station)
 
-    # Filter wilayah Indonesia: 90 - 150 BT (lon), -15 - 15 LS/LU (lat)
-    var = var.sel(lat=slice(-15, 15), lon=slice(90, 150))
+if df is None or df.empty:
+    st.warning("❗ Data tidak tersedia atau format salah.")
+    st.stop()
 
-    if is_vector:
-        u = u.sel(lat=slice(-15, 15), lon=slice(90, 150))
-        v = v.sel(lat=slice(-15, 15), lon=slice(90, 150))
+# ==== PROSES DATA ====
+df["Bulan"] = df["Tanggal"].dt.to_period("M")
+df["Tahun"] = df["Tanggal"].dt.year
+bulanan = df.groupby("Bulan")["Hujan"].sum()
+tahunan = df.groupby("Tahun")["Hujan"].sum()
 
-    # Buat plot dengan cartopy
-    fig = plt.figure(figsize=(10, 6))
-    ax = plt.axes(projection=ccrs.PlateCarree())
-    ax.set_extent([90, 150, -15, 15], crs=ccrs.PlateCarree())
+# ==== VISUALISASI ====
+tab1, tab2 = st.tabs(["📆 Tren Bulanan", "📅 Tren Tahunan"])
 
-    # Format waktu validasi
-    valid_time = ds.time[forecast_hour].values
-    valid_dt = pd.to_datetime(str(valid_time))
-    valid_str = valid_dt.strftime("%HUTC %a %d %b %Y")
-    tstr = f"t+{forecast_hour:03d}"
-
-    title_left = f"{label}Valid {valid_str}"
-    title_right = f"GFS{tstr}"
-
-    ax.set_title(title_left, loc="left", fontsize=10, fontweight="bold")
-    ax.set_title(title_right, loc="right", fontsize=10, fontweight="bold")
-
-    if is_contour:
-        cs = ax.contour(var.lon, var.lat, var.values, levels=15, colors='black', linewidths=0.8, transform=ccrs.PlateCarree())
-        ax.clabel(cs, fmt="%d", colors='black', fontsize=8)
-        
-    else:
-        im = ax.pcolormesh(var.lon, var.lat, var.values,
-                   cmap=cmap, vmin=0, vmax=50,
-                   transform=ccrs.PlateCarree())
-        cbar = plt.colorbar(im, ax=ax, orientation='vertical', pad=0.02)
-        cbar.set_label(label)
-        if is_vector:
-            ax.quiver(var.lon[::5], var.lat[::5],
-                      u.values[::5, ::5], v.values[::5, ::5],
-                      transform=ccrs.PlateCarree(), scale=700, width=0.002, color='black')
-        
-    # Tambah fitur peta
-    ax.coastlines(resolution='10m', linewidth=0.8)
-    ax.add_feature(cfeature.BORDERS, linestyle=':')
-    ax.add_feature(cfeature.LAND, facecolor='lightgray')
-
+with tab1:
+    st.subheader(f"📆 Tren Curah Hujan Bulanan – {station}")
+    fig, ax = plt.subplots(figsize=(12, 5))
+    bulanan.plot(kind="bar", ax=ax, color="skyblue")
+    ax.set_ylabel("Curah Hujan (mm)")
+    ax.set_xlabel("Bulan")
+    ax.set_title(f"Total Curah Hujan Bulanan")
+    ax.tick_params(axis='x', rotation=45)
     st.pyplot(fig)
+
+with tab2:
+    st.subheader(f"📅 Tren Curah Hujan Tahunan – {station}")
+    fig2, ax2 = plt.subplots(figsize=(8, 5))
+    tahunan.plot(kind="bar", ax=ax2, color="orange")
+    ax2.set_ylabel("Curah Hujan (mm)")
+    ax2.set_xlabel("Tahun")
+    ax2.set_title(f"Total Curah Hujan Tahunan")
+    ax2.tick_params(axis='x', rotation=0)
+    st.pyplot(fig2)
+
+st.info(f"Jumlah data tersedia: {len(df)} entri untuk pos hujan **{station}**.")
