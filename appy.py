@@ -6,7 +6,7 @@ from pathlib import Path
 # ==== CONFIGURASI DASHBOARD ====
 st.set_page_config(page_title="Dashboard Pos Hujan Sumatera Selatan", layout="wide")
 st.title("📈 Dashboard Interaktif Curah Hujan")
-st.markdown("**UAS SHINTA MEDIANY_M8TB_14.24.0012**")
+st.markdown("**La Nina Event 2020-2022**")
 
 # ==== LOAD DATA ====
 DATA_PATH = Path("data/17 pos hujan.xlsx")
