@@ -10,10 +10,10 @@ st.markdown("**La Nina Event 2020-2022**")
 
 # ==== LOAD DATA ====
 DATA_PATH = Path("17 pos hujan.xlsx")
-xls = pd.ExcelFile(DATA_PATH)
+xlsx = pd.ExcelFile(DATA_PATH)
 
 # Sheet metadata lokasi
-df_meta = xls.parse("pos hujan")
+df_meta = xlsx.parse("pos hujan")
 df_meta.columns = df_meta.columns.str.strip()
 station_names = df_meta["Pos Hujan Kerja Sama"].str.replace("Pos hujan ", "").str.strip().tolist()
 
